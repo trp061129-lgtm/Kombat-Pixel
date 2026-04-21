@@ -6,8 +6,8 @@ Ao contrário de jogos por turnos, esta aplicação utiliza um motor de física 
 O projeto foca-se numa gestão rigorosa de concorrência (Threads) e memória partilhada para garantir que o Servidor mantém a autoridade sobre o estado do jogo enquanto os Clientes renderizam a ação a 60 FPS através da biblioteca PyGame.
 
 ### Membros do Grupo
-* Nome do Aluno - Número
-* Nome do Aluno - Número
+* Rafael Dias - Número
+* Tomás Pacheco - Número
 
 ---
 
