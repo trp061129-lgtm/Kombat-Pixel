@@ -5,11 +5,15 @@ import sys
 import cliente
 from cliente.broadcast_receiver import BroadcastReceiver
 from cliente.stickman import StickmanCliente 
+from cliente.constantes import LARGURA_JANELA, ALTURA_JANELA, FPS
+from cliente import mapa
+from cliente.gerenciador_estado import GerenciadorEstado
+
 
 class Interface:
     def __init__(self):
         self.connection = socket.socket()
-        self.estado_jogo_atual = {} 
+        self.gestor_estado = GerenciadorEstado() 
         self.meu_id = None
 
     def receive_str(self, connect, n_bytes: int) -> str:
@@ -36,8 +40,7 @@ class Interface:
         size = self.receive_int(connection, cliente.INT_SIZE)
         data = connection.recv(size)
         return json.loads(data.decode('utf-8'))
-    # ------------------------------------------------------------------
-
+    
     def execute(self):
         print("A ligar ao Servidor do Jogo...")
         try:
@@ -53,58 +56,90 @@ class Interface:
         print(f"Conectado com sucesso! Sou o jogador: {self.meu_id}")
 
         # Iniciar a thread receiver
-        receiver = BroadcastReceiver(self.connection, self.estado_jogo_atual)
+        receiver = BroadcastReceiver(self.connection, self.gestor_estado)
         receiver.start()
 
-        # Iniciar o Pygame
+        # Iniciar o Pygame usando o ficheiro de Constantes
         pygame.init()
-        ecra = pygame.display.set_mode((800, 600))
+        fonte_derrota = pygame.font.SysFont("Arial", 72, bold=True)
+        ecra = pygame.display.set_mode((LARGURA_JANELA, ALTURA_JANELA))
         pygame.display.set_caption(f"Stickman Arena - {self.meu_id}")
         relogio = pygame.time.Clock()
 
-        players_visuais = {} # Guarda as classes gráficas dos jogadores
+        players_visuais = {}
         rodar = True
 
         while rodar:
-            #Eventos do Sistema
             for evento in pygame.event.get():
                 if evento.type == pygame.QUIT:
                     self.send_str(self.connection, cliente.QUIT_OP)
                     rodar = False
 
-            #Ler Teclado
+            # Ler Teclado
             teclas = pygame.key.get_pressed()
             acoes = []
             if teclas[pygame.K_LEFT] or teclas[pygame.K_a]: acoes.append("esquerda")
             if teclas[pygame.K_RIGHT] or teclas[pygame.K_d]: acoes.append("direita")
             if teclas[pygame.K_UP] or teclas[pygame.K_w]: acoes.append("saltar")
-
-            #Enviar Comandos ao Servidor (MOVE_OP)
-            self.send_str(self.connection, cliente.MOVE_OP)
+            if teclas[pygame.K_SPACE]: acoes.append("atacar") 
+            
+            self.send_str(self.connection, cliente.INPUT_OP)
             self.send_object(self.connection, acoes)
 
-            #Renderizar os Gráficos
-            ecra.fill((200, 230, 255)) # Fundo Azul Céu
-            pygame.draw.rect(ecra, (100, 100, 100), (0, 600, 800, 50)) # Chão
+            # Renderizar os Gráficos
+            ecra.fill((200, 230, 255))
+            
 
-            # Sincronizar personagens do ecrã com o dicionário que a Thread Receiver atualizou
-            for id_jog, dados_jog in self.estado_jogo_atual.items():
+            pygame.draw.rect(ecra, (100, 100, 100), (0, ALTURA_JANELA - 20, LARGURA_JANELA, 20))
+
+            
+            for plat in mapa.PLATAFORMAS:
+                px_x = plat["x"] * LARGURA_JANELA
+                px_y = plat["y"] * ALTURA_JANELA
+                px_larg = plat["largura"] * LARGURA_JANELA
+                px_alt = plat["altura"] * ALTURA_JANELA
+                
+                # Desenha a plataforma castanha
+                pygame.draw.rect(ecra, (139, 69, 19), (px_x, px_y, px_larg, px_alt))
+                # Desenha uma linha verde por cima para parecer relva
+                pygame.draw.rect(ecra, (34, 139, 34), (px_x, px_y, px_larg, 5))
+
+            estado_jogo_atual = self.gestor_estado.obter_estado()
+
+            for id_jog, dados_jog in estado_jogo_atual.items():
                 if id_jog not in players_visuais:
                     players_visuais[id_jog] = StickmanCliente(id_jog)
-                
                 players_visuais[id_jog].atualizar(dados_jog)
+                players_visuais[id_jog].desenhar(ecra)
 
-            # Apagar players que já saíram
-            ids_mortos = [i for i in players_visuais if i not in self.estado_jogo_atual]
+            if self.meu_id in estado_jogo_atual:
+                meus_dados = estado_jogo_atual[self.meu_id]
+                fonte_texto = pygame.font.SysFont("Arial", 72, bold=True)
+                
+                # 1. DERROTA
+                if meus_dados["vidas"] <= 0:
+                    texto = fonte_texto.render("DERROTA", True, (255, 0, 0))
+                    ecra.blit(texto, (LARGURA_JANELA//2 - texto.get_width()//2, ALTURA_JANELA//2))
+                
+                # 2. VITÓRIA
+                else:
+                    # Conta quantos jogadores na arena ainda têm vidas
+                    jogadores_vivos = [id_j for id_j, dados_j in estado_jogo_atual.items() if dados_j["vidas"] > 0]
+                    
+                    # Se só sobrar 1
+                    if len(jogadores_vivos) == 1 and len(estado_jogo_atual) > 1:
+                        texto = fonte_texto.render("VITÓRIA!", True, (255, 215, 0)) # Amarelo Dourado
+                        ecra.blit(texto, (LARGURA_JANELA//2 - texto.get_width()//2, ALTURA_JANELA//2))
+
+            ids_mortos = [i for i in players_visuais if i not in estado_jogo_atual]
             for i in ids_mortos:
                 del players_visuais[i]
 
-            # Desenhar todos na lista
             for player in players_visuais.values():
                 player.desenhar(ecra)
 
             pygame.display.flip()
-            relogio.tick(60) # Mantém 60 frames por segundo
+            relogio.tick(FPS)
 
         pygame.quit()
         sys.exit()

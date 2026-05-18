@@ -3,10 +3,10 @@ import json
 import cliente
 
 class BroadcastReceiver(threading.Thread):
-    def __init__(self, connection, estado_partilhado):  
+    def __init__(self, connection, gerenciador_estado):  
         super().__init__(daemon=True)
         self.connection = connection
-        self.estado_partilhado = estado_partilhado #Estado do jogo partilhado com a interface
+        self.gerenciador = gerenciador_estado 
 
     def receive_int(self, n_bytes: int) -> int:
         data = self.connection.recv(n_bytes)
@@ -24,12 +24,10 @@ class BroadcastReceiver(threading.Thread):
                 comando = self.connection.recv(cliente.COMMAND_SIZE).decode('utf-8')
                 if comando == cliente.SYNC_OP:
                     
-                    # Recebe um dicionário com as coordenadas e as vidas de todos os players
                     pacote = self.receive_object()
                     
-                    # Atualiza o dicionário partilhado com as novas posições e vidas
-                    self.estado_partilhado.clear()
-                    self.estado_partilhado.update(pacote["estado"])
+                    
+                    self.gerenciador.atualizar_estado(pacote["estado"])
                     
             except Exception as e:
                 print(f"Receiver desconectado: {e}")
