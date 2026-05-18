@@ -49,7 +49,7 @@ class ProcessaCliente(threading.Thread):
                     self.send_object({"id": self.meu_id})
                     print(f"[{self.address}] Registado como {self.meu_id}")
 
-                elif request_type == servidor.MOVE_OP:
+                elif request_type == servidor.INPUT_OP:
                     # Recebe a lista de teclas premidas (ex: ["direita", "saltar"])
                     acoes = self.receive_object()
                     if self.meu_id:
