@@ -48,7 +48,7 @@ O desempenho e a fluidez do **Stickman Arena** assentam numa separação estrita
 O repositório está organizado de forma modular para separar claramente as responsabilidades:
 
 * **`mapa.py`**: Ficheiro central de arquitetura. Define as constantes físicas e dimensões das plataformas, garantindo que o Cliente e o Servidor partilham a mesma "verdade" espacial.
-* **`/config.py`** (ou `constantes.py`): Parâmetros de conexão (IP, Porta) e códigos do protocolo de rede.
+* **`__init__.py`**: Parâmetros de conexão (IP, Porta) e códigos do protocolo de rede.
 
 * **`/servidor/`**:
   * `maquina.py`: Inicializador do servidor.
