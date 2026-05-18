@@ -21,24 +21,46 @@ O projeto foca-se numa gestão rigorosa de concorrência (*Threads*) e memória 
 
 ---
 
+### Arquitetura de Rede e Concorrência (Threads)
+
+O desempenho e a fluidez do **Stickman Arena** assentam numa separação estrita de tarefas. Para garantir que o motor gráfico não "congela" à espera de dados da rede, o sistema tira partido de *Multithreading* e *Locks* (exclusão mútua) para evitar *Race Conditions*.
+
+**Fluxo de Comunicação Contínua:**
+1. **Input:** O Cliente capta as teclas premidas pelo jogador e envia um pacote de ação de tamanho fixo para o Servidor.
+2. **Processamento:** O Servidor valida o movimento, aplica as leis da física (gravidade e colisões) e regista alterações no Dicionário de Estado Global.
+3. **Broadcast:** O Servidor serializa o Estado Global (em formato JSON) e envia esta "fotografia" do mapa para todos os clientes em simultâneo (~50 vezes por segundo).
+4. **Renderização:** O Cliente recebe a "fotografia", atualiza o seu Gestor de Estado interno e a Máquina de Estados desenha a *sprite* correta no ecrã.
+
+**Ecossistema de Threads:**
+* **No Servidor:**
+  * **Thread Principal (`maquina.py`):** Dedicada exclusivamente a manter o `socket.accept()` aberto, aguardando e validando a conexão de novos jogadores.
+  * **Threads de Cliente (`processo_cliente.py`):** Criada uma por cada jogador conectado. O seu único trabalho é ficar à escuta (`recv`) dos pacotes de movimento daquele jogador em específico.
+  * **Thread Emissora (`broadcast_emissor.py`):** Opera em ciclo contínuo (com *sleeps* de 0.02s). Usa um `threading.Lock()` para ler o Estado Global de forma segura, empacota os dados e emite para todos os *sockets* clientes ativos.
+
+* **No Cliente:**
+  * **Thread Principal (`interface.py`):** Gere o ciclo de vida do PyGame, roda a 60 FPS ininterruptos, capta eventos de teclado e desenha as imagens no ecrã com base nos dados mais recentes que tem na memória.
+  * **Thread Recetora (`broadcast_receiver.py`):** *Daemon Thread* que opera em pano de fundo à escuta da rede. Quando um novo pacote JSON do servidor chega, valida-o e entrega-o ao `gerenciador_estado.py` protegido por um *Lock*, garantindo uma transição de *frames* perfeitamente segura.
+
+---
+
 ### Estrutura do Projeto
 
-O repositório está organizado de forma modular para separar claramente as responsabilidades de rede, lógica computacional e gráficos:
+O repositório está organizado de forma modular para separar claramente as responsabilidades:
 
-* **`mapa.py`**: O ficheiro central de arquitetura. Define as constantes físicas, dimensões das plataformas e tamanho normalizado dos lutadores, garantindo que o Cliente e o Servidor partilham a mesma "verdade" espacial.
-* **`/config.py`** (ou `constantes.py`): Parâmetros de conexão (IP, Porta) e códigos do protocolo de rede (ex: `JOIN_OP`, `SYNC_OP`, `INPUT_OP`).
+* **`mapa.py`**: Ficheiro central de arquitetura. Define as constantes físicas e dimensões das plataformas, garantindo que o Cliente e o Servidor partilham a mesma "verdade" espacial.
+* **`/config.py`** (ou `constantes.py`): Parâmetros de conexão (IP, Porta) e códigos do protocolo de rede.
 
 * **`/servidor/`**:
-  * `maquina.py`: O ponto de entrada principal. Efetua o *bind* da porta TCP e gere a aceitação de novas conexões.
-  * `dados.py`: O "Motor" do jogo. Gere o estado global, aplica a física newtoniana (`vel_y`), processa os combates e o *cooldown* de ataques. Protegido por `threading.Lock()`.
-  * `processo_cliente.py`: Instância de Thread que recebe e processa as teclas premidas por um cliente específico.
-  * `broadcast_emissor.py`: Thread que envia continuamente a "fotografia" do estado do jogo para todos os clientes a 50 *frames* por segundo.
+  * `maquina.py`: Inicializador do servidor.
+  * `dados.py`: O "Motor" lógico. Gere o estado global e aplica a física newtoniana e *cooldowns*. Protegido por `threading.Lock()`.
+  * `processo_cliente.py`: Instância de processamento individual por *socket* de jogador.
+  * `broadcast_emissor.py`: Emissor de pacotes de estado JSON de alta frequência.
 
 * **`/cliente/`**:
-  * `interface.py`: O controlador do *Main Loop*. Trata da captura de teclado e renderização via PyGame.
-  * `gerenciador_estado.py`: Classe de encapsulamento que protege os dados recebidos da rede e os fornece de forma segura (*Thread-safe*) ao motor gráfico.
-  * `broadcast_receiver.py`: *Daemon Thread* responsável por intercetar os pacotes JSON do servidor e enviá-los para o Gerenciador de Estado.
-  * `stickman.py`: Classe responsável pela lógica de desenho vetorial do personagem, braço de ataque dinâmico, barra de HP e interface de Vidas.
+  * `interface.py`: Controlador do *Main Loop* e renderização PyGame.
+  * `gerenciador_estado.py`: Classe de encapsulamento seguro (*Thread-safe*) dos dados da rede.
+  * `broadcast_receiver.py`: Intercetor assíncrono de mensagens do servidor.
+  * `stickman.py`: Máquina de Estados visual do personagem (animações *Idle*, *Run*, *Jump*, *Attack*), *hitboxes* visuais e sistema de *Palette Swapping* (cores baseadas no ID).
 
 ---
 
@@ -49,7 +71,7 @@ O ambiente anfitrião deve iniciar o módulo de serviço executando o comando na
 `python -m servidor`
 
 **2. Conectar um Cliente:**
-Cada jogador deve inicializar o seu módulo executando o seguinte comando noutra instância de terminal (ou noutro PC na mesma rede):
+Cada jogador deve inicializar o seu módulo executando o seguinte comando noutra instância de terminal (ou noutro PC na mesma rede local):
 `python -m cliente`
 
 A inicialização do PyGame decorrerá imediatamente após o *Handshake* TCP.
@@ -57,15 +79,5 @@ A inicialização do PyGame decorrerá imediatamente após o *Handshake* TCP.
 **Controlos em Jogo:**
 * **A / D** ou **Setas (Esquerda / Direita):** Deslocação horizontal.
 * **W** ou **Seta (Cima):** Impulso vertical (Salto fluido).
-* **ESPAÇO:** Ataque Corpo-a-Corpo (Soco).
-* **Botão (X) da janela:** Encerramento seguro da ligação (`QUIT_OP`).
-
----
-
-### Próximos Passos e Otimizações Planeadas
-
-Graças à base robusta de física e rede, o sistema está pronto para as seguintes expansões:
-
-* **Animações Baseadas em Sprites:** Substituir os retângulos vetoriais do PyGame por *spritesheets* animadas (correr, saltar, atacar, sofrer dano).
-* **Diversidade de Ataques e Projéteis:** Implementar novos *inputs* (ex: Ataque Forte vs Ataque Rápido) e entidades independentes no servidor (ex: bolas de fogo).
-* **Efeitos Sonoros (Áudio):** Adicionar *feedback* sonoro na interface do cliente (PyGame Mixer) sempre que uma variável de estado (como levar dano ou perder uma vida) for alterada.
+* **ESPAÇO:** Ataque Corpo-a-Corpo (Soco animado).
+* **Botão (X) da janela:** Encerramento seguro da ligação via Sockets (`QUIT_OP`).
