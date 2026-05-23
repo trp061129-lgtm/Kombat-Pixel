@@ -1,7 +1,8 @@
 import pygame
-from cliente.constantes import LARGURA_JANELA, ALTURA_JANELA
-from cliente import mapa
 import os
+
+
+from cliente import LARGURA_JANELA, ALTURA_JANELA, BONECO_LARGURA, BONECO_ALTURA
 
 class StickmanCliente:
     def __init__(self, id_jogador):
@@ -9,9 +10,9 @@ class StickmanCliente:
         self.hp = 100
         self.vidas = 3
         
-        # Dimensões base da Hitbox lidas do mapa
-        self.largura = LARGURA_JANELA * mapa.BONECO_LARGURA
-        self.altura = ALTURA_JANELA * mapa.BONECO_ALTURA
+       
+        self.largura = LARGURA_JANELA * BONECO_LARGURA
+        self.altura = ALTURA_JANELA * BONECO_ALTURA
         
         # Histórico de posições
         self.pos_x_real = 0
