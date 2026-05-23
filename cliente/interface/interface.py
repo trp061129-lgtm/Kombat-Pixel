@@ -2,11 +2,11 @@ import socket
 import json
 import pygame
 import sys
+
 import cliente
+from cliente import LARGURA_JANELA, ALTURA_JANELA, FPS
 from cliente.broadcast_receiver import BroadcastReceiver
 from cliente.stickman import StickmanCliente 
-from cliente.constantes import LARGURA_JANELA, ALTURA_JANELA, FPS
-from cliente import mapa
 from cliente.gerenciador_estado import GerenciadorEstado
 
 
@@ -59,7 +59,7 @@ class Interface:
         receiver = BroadcastReceiver(self.connection, self.gestor_estado)
         receiver.start()
 
-        # Iniciar o Pygame usando o ficheiro de Constantes
+        # Iniciar o Pygame
         pygame.init()
         fonte_derrota = pygame.font.SysFont("Arial", 72, bold=True)
         ecra = pygame.display.set_mode((LARGURA_JANELA, ALTURA_JANELA))
@@ -86,32 +86,32 @@ class Interface:
             self.send_str(self.connection, cliente.INPUT_OP)
             self.send_object(self.connection, acoes)
 
-            # Renderizar os Gráficos
+            # Renderizar os Gráficos (Fundo)
             ecra.fill((200, 230, 255))
             
-
+            # Desenha o Chão
             pygame.draw.rect(ecra, (100, 100, 100), (0, ALTURA_JANELA - 20, LARGURA_JANELA, 20))
 
-            
-            for plat in mapa.PLATAFORMAS:
+            # Desenha as Plataformas 
+            for plat in cliente.PLATAFORMAS:
                 px_x = plat["x"] * LARGURA_JANELA
                 px_y = plat["y"] * ALTURA_JANELA
                 px_larg = plat["largura"] * LARGURA_JANELA
                 px_alt = plat["altura"] * ALTURA_JANELA
                 
-                # Desenha a plataforma castanha
                 pygame.draw.rect(ecra, (139, 69, 19), (px_x, px_y, px_larg, px_alt))
-                # Desenha uma linha verde por cima para parecer relva
                 pygame.draw.rect(ecra, (34, 139, 34), (px_x, px_y, px_larg, 5))
 
             estado_jogo_atual = self.gestor_estado.obter_estado()
 
+            # Desenha todos os jogadores
             for id_jog, dados_jog in estado_jogo_atual.items():
                 if id_jog not in players_visuais:
                     players_visuais[id_jog] = StickmanCliente(id_jog)
                 players_visuais[id_jog].atualizar(dados_jog)
                 players_visuais[id_jog].desenhar(ecra)
 
+            # Condições de Vitória/Derrota
             if self.meu_id in estado_jogo_atual:
                 meus_dados = estado_jogo_atual[self.meu_id]
                 fonte_texto = pygame.font.SysFont("Arial", 72, bold=True)
@@ -123,20 +123,15 @@ class Interface:
                 
                 # 2. VITÓRIA
                 else:
-                    # Conta quantos jogadores na arena ainda têm vidas
                     jogadores_vivos = [id_j for id_j, dados_j in estado_jogo_atual.items() if dados_j["vidas"] > 0]
-                    
-                    # Se só sobrar 1
                     if len(jogadores_vivos) == 1 and len(estado_jogo_atual) > 1:
-                        texto = fonte_texto.render("VITÓRIA!", True, (255, 215, 0)) # Amarelo Dourado
+                        texto = fonte_texto.render("VITÓRIA!", True, (255, 215, 0))
                         ecra.blit(texto, (LARGURA_JANELA//2 - texto.get_width()//2, ALTURA_JANELA//2))
 
+            # Remove jogadores que saíram do servidor
             ids_mortos = [i for i in players_visuais if i not in estado_jogo_atual]
             for i in ids_mortos:
                 del players_visuais[i]
-
-            for player in players_visuais.values():
-                player.desenhar(ecra)
 
             pygame.display.flip()
             relogio.tick(FPS)
